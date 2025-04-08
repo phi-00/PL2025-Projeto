@@ -1,13 +1,14 @@
 import ply.lex as lex
 import re
+import sys
 
 # Lista de tokens
 tokens = [
     'PROGRAM',
     'VAR',
+    'TYPE',
     'BEGIN',
     'END',
-    'INTEGER',
     'WRITE',
     'WRITELN',
     'READLN',
@@ -30,6 +31,7 @@ tokens = [
     'MINUS',
     'TIMES',
     'DIVIDE',
+    'MODULE',
     'ASSIGN',
     'LPAREN',
     'RPAREN',
@@ -43,6 +45,11 @@ tokens = [
     'GE',
     'EQ',
     'NE',
+    'INTEGER',
+    'BOOLEAN',
+    'STRING',
+    'REAL',
+    'CHAR'
 ]
 
 # Expressões regulares para tokens simples
@@ -50,6 +57,7 @@ t_PLUS = r'\+'
 t_MINUS = r'-'
 t_TIMES = r'\*'
 t_DIVIDE = r'/'
+t_MODULE = r'%'
 t_ASSIGN = r':='
 t_LPAREN = r'\('
 t_RPAREN = r'\)'
@@ -70,6 +78,10 @@ t_VAR = r'var'
 t_BEGIN = r'begin'
 t_END = r'end'
 t_INTEGER = r'integer'
+t_BOOLEAN = r'boolean'
+t_STRING = r'string'
+t_REAL = r'real'
+t_CHAR = r'char'
 t_WRITE = r'write'
 t_WRITELN = r'writeln'
 t_READLN = r'readln'
@@ -86,6 +98,7 @@ t_NOT = r'not'
 t_WHILE = r'while'
 t_FUNCTION = r'function'
 t_PROCEDURE = r'procedure'
+t_TYPE = r'type'
 
 
 
@@ -109,7 +122,3 @@ def t_error(t):
 
 # Construir o lexer
 lexer = lex.lex()
-
-
-
-

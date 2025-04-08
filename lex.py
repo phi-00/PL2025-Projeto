@@ -16,9 +16,12 @@ tokens = [
     'ELSE',
     'FOR',
     'TO',
+    'DOWNTO',
     'DO',
     'WHILE',
     'AND',
+    'OR',
+    'NOT',
     'FUNCTION',
     'PROCEDURE',
     'IDENTIFIER',
@@ -74,8 +77,12 @@ t_IF = r'if'
 t_THEN = r'then'
 t_ELSE = r'else'
 t_FOR = r'for'
+t_DOWNTO = r'downto'
 t_TO = r'to'
 t_DO = r'do'
+t_AND = r'and'
+t_OR = r'or'
+t_NOT = r'not'
 t_WHILE = r'while'
 t_FUNCTION = r'function'
 t_PROCEDURE = r'procedure'
@@ -102,5 +109,7 @@ def t_error(t):
 
 # Construir o lexer
 lexer = lex.lex()
+
+
 
 

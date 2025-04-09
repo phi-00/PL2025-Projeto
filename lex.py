@@ -49,8 +49,19 @@ tokens = [
     'BOOLEAN',
     'STRING',
     'REAL',
-    'CHAR'
+    'CHAR',
+    'TEXT',
+    'COMMENT'
 ]
+
+def t_TEXT(t):
+    r'\'.*\''
+    return t
+
+def t_COMMENT(t):
+    r'\{[^\}]*\}'
+    return t
+
 
 # Expressões regulares para tokens simples (literals)
 t_PLUS = r'\+'

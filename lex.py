@@ -52,7 +52,7 @@ tokens = [
     'CHAR'
 ]
 
-# Expressões regulares para tokens simples
+# Expressões regulares para tokens simples (literals)
 t_PLUS = r'\+'
 t_MINUS = r'-'
 t_TIMES = r'\*'
@@ -72,34 +72,115 @@ t_GE = r'>='
 t_EQ = r'='
 t_NE = r'<>'
 
-# Expressões regulares para tokens com palavras-chave
-t_PROGRAM = r'program'
-t_VAR = r'var'
-t_BEGIN = r'begin'
-t_END = r'end'
-t_INTEGER = r'integer'
-t_BOOLEAN = r'boolean'
-t_STRING = r'string'
-t_REAL = r'real'
-t_CHAR = r'char'
-t_WRITE = r'write'
-t_WRITELN = r'writeln'
-t_READLN = r'readln'
-t_IF = r'if'
-t_THEN = r'then'
-t_ELSE = r'else'
-t_FOR = r'for'
-t_DOWNTO = r'downto'
-t_TO = r'to'
-t_DO = r'do'
-t_AND = r'and'
-t_OR = r'or'
-t_NOT = r'not'
-t_WHILE = r'while'
-t_FUNCTION = r'function'
-t_PROCEDURE = r'procedure'
-t_TYPE = r'type'
 
+# Controlo de fluxo
+def t_IF(t):
+    r'(?i:if)'
+    return t
+
+def t_THEN(t):
+    r'(?i:then)'
+    return t
+
+def t_ELSE(t):
+    r'(?i:else)'
+    return t
+
+def t_FOR(t):
+    r'(?i:for)'
+    return t
+
+def t_DOWNTO(t):
+    r'(?i:downto)'
+    return t
+
+def t_TO(t):
+    r'(?i:to)'
+    return t
+
+def t_DO(t):
+    r'(?i:do)'
+    return t
+
+def t_AND(t):
+    r'(?i:and)'
+    return t
+
+def t_OR(t):
+    r'(?i:or)'
+    return t
+
+def t_NOT(t):
+    r'(?i:not)'
+    return t
+
+def t_WHILE(t):
+    r'(?i:while)'
+    return t
+
+# Declaração de variáveis
+def t_INTEGER(t):
+    r'(?i:integer)'
+    return t
+
+def t_REAL(t):
+    r'(?i:real)'
+    return t
+
+def t_BOOLEAN(t):
+    r'(?i:boolean)'
+    return t
+
+def t_STRING(t):
+    r'(?i:string)'
+    return t
+
+def t_CHAR(t):
+    r'(?i:char)'
+    return t
+
+def t_TYPE(t):
+    r'(?i:type)'
+    return t
+
+def t_VAR(t):
+    r'(?i:var)'
+    return t
+
+# Leitura e Escrita
+def t_READLN(t):
+    r'(?i:read)'
+    return t
+
+def t_WRITELN(t):
+    r'(?i:writeln)'
+    return t
+
+def t_WRITE(t):
+    r'(?i:write)'
+    return t
+
+# Inicialização de programas
+
+def t_PROCEDURE(t):
+    r'(?i:procedure)'
+    return t
+
+def t_FUNCTION(t):
+    r'(?i:function)'
+    return t
+
+def t_BEGIN(t):
+    r'(?i:begin)'
+    return t
+
+def t_PROGRAM(t):
+    r'(?i:program)'
+    return t
+
+def t_END(t):
+    r'(?i:end)'
+    return t
 
 
 def t_IDENTIFIER(t):
@@ -115,10 +196,23 @@ def t_NUMBER(t):
 
 t_ignore = ' \t\n\r'
 
+def t_newline(t):
+    r'\n+'
+    t.lexer.lineno += len(t.value)
+
 
 def t_error(t):
-    print(f"Caractere ilegal '{t.value[0]}'")
+    print(f"Caractere ilegal '{t.value[0]}' na linha {t.lineno}")
     t.lexer.skip(1)
 
 # Construir o lexer
 lexer = lex.lex()
+
+def main():
+    data = sys.stdin.read()
+    lexer.input(data)
+    for token in lexer:
+        print(token)
+
+if __name__ == '__main__':
+    main()

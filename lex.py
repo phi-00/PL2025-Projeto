@@ -6,7 +6,6 @@ import sys
 tokens = [
     'PROGRAM',
     'VAR',
-    'TYPE',
     'BEGIN',
     'END',
     'WRITE',
@@ -54,6 +53,7 @@ tokens = [
     'REAL',
     'CHAR',
     'ARRAY',
+    'OF',
     'TEXT',
     'COMMENT',
 ]
@@ -167,8 +167,8 @@ def t_ARRAY(t):
     r'(?i:array)'
     return t
 
-def t_TYPE(t):
-    r'(?i:type)'
+def t_OF(t):
+    r'(?i:of)'
     return t
 
 def t_VAR(t):

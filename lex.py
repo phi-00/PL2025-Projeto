@@ -6,7 +6,6 @@ import sys
 tokens = [
     'PROGRAM',
     'VAR',
-    'TYPE',
     'BEGIN',
     'END',
     'WRITE',
@@ -31,10 +30,13 @@ tokens = [
     'MINUS',
     'TIMES',
     'DIVIDE',
+    'INTDIV',
     'MODULE',
     'ASSIGN',
     'LPAREN',
     'RPAREN',
+    'LBRACKET',
+    'RBRACKET',
     'SEMICOLON',
     'COLON',
     'COMMA',
@@ -50,8 +52,10 @@ tokens = [
     'STRING',
     'REAL',
     'CHAR',
+    'ARRAY',
+    'OF',
     'TEXT',
-    'COMMENT'
+    'COMMENT',
 ]
 
 def t_TEXT(t):
@@ -68,10 +72,11 @@ t_PLUS = r'\+'
 t_MINUS = r'-'
 t_TIMES = r'\*'
 t_DIVIDE = r'/'
-t_MODULE = r'%'
 t_ASSIGN = r':='
 t_LPAREN = r'\('
 t_RPAREN = r'\)'
+t_LBRACKET = r'\['
+t_RBRACKET = r'\]'
 t_SEMICOLON = r';'
 t_COLON = r':'
 t_COMMA = r','
@@ -83,6 +88,14 @@ t_GE = r'>='
 t_EQ = r'='
 t_NE = r'<>'
 
+
+def t_INTDIV(t):
+    r'(?i:div)'
+    return t
+
+def t_MODULE(t):
+    r'(?i:mod)'
+    return t
 
 # Controlo de fluxo
 def t_IF(t):
@@ -150,8 +163,12 @@ def t_CHAR(t):
     r'(?i:char)'
     return t
 
-def t_TYPE(t):
-    r'(?i:type)'
+def t_ARRAY(t):
+    r'(?i:array)'
+    return t
+
+def t_OF(t):
+    r'(?i:of)'
     return t
 
 def t_VAR(t):

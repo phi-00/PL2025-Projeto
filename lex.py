@@ -177,7 +177,7 @@ def t_VAR(t):
 
 # Leitura e Escrita
 def t_READLN(t):
-    r'(?i:read)'
+    r'(?i:readln)'
     return t
 
 def t_WRITELN(t):
@@ -217,7 +217,7 @@ def t_IDENTIFIER(t):
 
 
 def t_NUMBER(t):
-    r'\d+'
+    r'[+|-]?\d+'
     t.value = int(t.value)
     return t
 

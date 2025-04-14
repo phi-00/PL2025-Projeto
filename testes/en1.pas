@@ -2,8 +2,8 @@ program SomaDoisInteiros;
 var
   num1, num2, soma: Integer;
 begin
-  num1 := 5;  
-  num2 := 10; 
+  num1 := -5;  
+  num2 := 10;
   
   soma := num1 + num2;
   

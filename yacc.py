@@ -76,10 +76,8 @@ def p_atribuicao(p):
     'atribuicao : IDENTIFIER ASSIGN expressao_aritmetica SEMICOLON'
     global output, symbol_table
     if p[1] in symbol_table:
-        output += f"PUSHG {list(symbol_table.keys()).index(p[1])}\n"
-        output += f"PUSHI {p[3]}\n"
+        output += f"{p[3]}"  # Usa o código gerado pela expressao_aritmetica
         output += f"STOREG {list(symbol_table.keys()).index(p[1])}\n"
-        symbol_table[p[1]] = p[3]  # Atualiza o valor da variável na tabela de símbolos
     else:
         print(f"Erro: Variável '{p[1]}' não declarada.")
     p[0] = output
@@ -92,8 +90,7 @@ def p_expressao_aritmetica(p):
     if len(p) == 2:
         p[0] = p[1]
     else:
-        p[0] = p[1] + p[3]
-        output += "ADD\n"
+        p[0] = p[1] + p[3] + "ADD\n"  # Gera o código para a soma
 
 # Regra para termo
 def p_termo(p):
@@ -101,11 +98,9 @@ def p_termo(p):
              | IDENTIFIER'''
     global output, symbol_table
     if isinstance(p[1], int):  # Número
-        p[0] = int(p[1])
-        output += f"PUSHI {p[1]}\n"
+        p[0] = f"PUSHI {p[1]}\n"
     elif p[1] in symbol_table:  # Variável
-        p[0] = symbol_table[p[1]]
-        output += f"PUSHG {list(symbol_table.keys()).index(p[1])}\n"
+        p[0] = f"PUSHG {list(symbol_table.keys()).index(p[1])}\n"
     else:
         print(f"Erro: Variável '{p[1]}' não declarada.")
 
@@ -157,6 +152,4 @@ if __name__ == "__main__":
         print("Resultado: \n", output)
     except Exception as e:
         print("Erro ao processar entrada:", e)
-
-
 

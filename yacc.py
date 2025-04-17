@@ -119,33 +119,51 @@ def p_comando_composto(p):
 # Regras para atribuição
 def p_atribuicao(p):
     'atribuicao : IDENTIFIER ASSIGN expressao_aritmetica SEMICOLON'
-    if p[1] in symbol_table:
-        codigo = concat_safe(p[3], f"STOREG {list(symbol_table.keys()).index(p[1])}\n")
+    var_name = p[1]
+    expressao = p[3]
+
+    if var_name in symbol_table:
+        # Adiciona este bloco para guardar valor (IMPORTANTE!)
+        if isinstance(expressao, str) and expressao.startswith("PUSHS"):
+            # Extrai o valor literal da string
+            valor = expressao.split('"')[1]
+        elif expressao.startswith("PUSHI"):
+            valor = int(expressao.split()[1])
+        else:
+            valor = None
+
+        symbol_table[var_name] = valor  # Agora sim, guarda o valor!
+
+        codigo = concat_safe(expressao, f"STOREG {list(symbol_table.keys()).index(var_name)}\n")
         p[0] = codigo
     else:
-        print(f"Erro: Variável '{p[1]}' não declarada.")
+        print(f"Erro: Variável '{var_name}' não declarada.")
         p[0] = ""
+
 
 # Regras para expressões aritméticas
 def p_expressao_aritmetica(p):
-    '''expressao_aritmetica : termo
-                            | expressao_aritmetica PLUS termo
+    '''expressao_aritmetica : expressao_aritmetica PLUS termo
                             | expressao_aritmetica MINUS termo
                             | expressao_aritmetica TIMES termo
                             | expressao_aritmetica DIVIDE termo
-                            | expressao_aritmetica INTDIV termo'''
+                            | expressao_aritmetica INTDIV termo
+                            | termo'''
     if len(p) == 2:
-        p[0] = p[1] if p[1] is not None else ""
-    elif p[2] == '+':
-        p[0] = concat_safe(p[1], p[3], "ADD\n")
-    elif p[2] == '-':
-        p[0] = concat_safe(p[1], p[3], "SUB\n")
-    elif p[2] == '*':
-        p[0] = concat_safe(p[1], p[3], "MUL\n")
-    elif p[2] == '/':
-        p[0] = concat_safe(p[1], p[3], "DIV\n")
-    elif p[2].lower() == 'div':  # INTDIV é 'div' em Pascal
-        p[0] = concat_safe(p[1], p[3], "IDIV\n")  #DIV ou IDIV (verificar VM)
+        p[0] = p[1]
+    else:
+        operador = p[2]
+        if operador == '+':
+            p[0] = concat_safe(p[1], p[3], "ADD\n")
+        elif operador == '-':
+            p[0] = concat_safe(p[1], p[3], "SUB\n")
+        elif operador == '*':
+            p[0] = concat_safe(p[1], p[3], "MUL\n")
+        elif operador == '/':
+            p[0] = concat_safe(p[1], p[3], "DIV\n")  # float division
+        elif operador.lower() == 'DIV' or operador == 'div':
+            p[0] = concat_safe(p[1], p[3], "IDIV\n")  # integer division
+
 
 # Regras para termos
 def p_termo(p):
@@ -186,12 +204,23 @@ def p_write(p):
     codigo = ""
     for arg in p[3]:
         if isinstance(arg, str) and (arg.startswith("'") or arg.startswith('"')):
+            # Se for uma string literal, usa WRITES
             codigo += f'PUSHS "{arg[1:-1]}"\nWRITES\n'  # WRITES já escreve sem newline
         elif arg in symbol_table:
-            codigo += f"PUSHG {list(symbol_table.keys()).index(arg)}\nWRITEI\n"
+            # Verifica se a variável é do tipo string ou outro tipo
+            var_value = symbol_table[arg]  # Pega o valor da variável
+            if isinstance(var_value, str):
+                # Se for string, usa WRITES
+                codigo += f"PUSHG {list(symbol_table.keys()).index(arg)}\nWRITES\n"
+            elif isinstance(var_value, int):  # Caso seja um inteiro
+                # Se for inteiro, usa WRITEI
+                codigo += f"PUSHG {list(symbol_table.keys()).index(arg)}\nWRITEI\n"
+            else:
+                print(f"Erro: Tipo desconhecido para a variável '{arg}'.")
         else:
             print(f"Erro: Argumento '{arg}' não reconhecido.")
     p[0] = codigo if codigo else ""
+
 
 # Regras para readln
 def p_readln(p):
@@ -240,9 +269,9 @@ def p_expressao_condicional(p):
                              | expressao_aritmetica EQ expressao_aritmetica
                              | expressao_aritmetica NE expressao_aritmetica'''
     if p[2] == '>':
-        op = 'GT'
+        op = 'SUP'
     elif p[2] == '<':
-        op = 'LT'
+        op = 'INF'
     elif p[2] == '>=':
         op = 'GE'
     elif p[2] == '<=':
@@ -295,27 +324,33 @@ def p_comando_for(p):
     end_label = new_label()
 
     var_index = list(symbol_table.keys()).index(p[2])
-    
+
     # Inicialização da variável de controlo
     init = p[4] + f"STOREG {var_index}\n"
 
-    # Condição: se var > limite, salta
-    cond = (f"{start_label}:\n" +
-            f"PUSHG {var_index}\n" + 
-            p[6] +
-            "GT\n" +
-            f"JZ {end_label}\n")
+    # Condição: se i > limite, termina
+    cond = (
+        f"{start_label}:\n"
+        f"PUSHG {var_index}\n"
+        + p[6] +
+        "SUP\n"
+        "NOT\n"
+        f"JZ {end_label}\n"
+    )
 
     # Corpo do ciclo + incremento
-    corpo = p[8]
-    inc = (f"PUSHG {var_index}\n" +
-           "PUSHI 1\n" +
-           "ADD\n" +
-           f"STOREG {var_index}\n" +
-           f"JUMP {start_label}\n" +
-           f"{end_label}:\n")
+    corpo = (
+        p[8] +
+        f"PUSHG {var_index}\n"
+        "PUSHI 1\n"
+        "ADD\n"
+        f"STOREG {var_index}\n"
+        f"JUMP {start_label}\n"
+        f"{end_label}:\n"
+    )
 
-    p[0] = init + cond + corpo + inc
+    p[0] = init + cond + corpo
+
 
 # Regras para o comando for com DOWNTO
 def p_comando_for_downto(p):
@@ -328,19 +363,21 @@ def p_comando_for_downto(p):
     init = p[4] + f"STOREG {var_index}\n"
 
     cond = (f"{start_label}:\n" +
-            f"PUSHG {var_index}\n" +
-            p[6] +
-            "LT\n" +  # Se i < limite inferior, termina
-            f"JZ {end_label}\n")
+        f"PUSHG {var_index}\n" +
+        p[6] +
+        "INF\n" +  # i < limite inferior → termina
+        f"JZ {end_label}\n")
+
 
     corpo = p[8]
 
     dec = (f"PUSHG {var_index}\n" +
-           "PUSHI 1\n" +
-           "SUB\n" +
-           f"STOREG {var_index}\n" +
-           f"JUMP {start_label}\n" +
-           f"{end_label}:\n")
+       "PUSHI 1\n" +
+       "SUB\n" +
+       f"STOREG {var_index}\n" +
+       f"JUMP {start_label}\n" +
+       f"{end_label}:\n")
+
 
     p[0] = init + cond + corpo + dec
 

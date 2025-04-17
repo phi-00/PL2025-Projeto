@@ -4,44 +4,72 @@ import sys
 
 output = ""  # Variável global para armazenar o código gerado
 symbol_table = {}  # Tabela de símbolos para armazenar variáveis e seus valores
+label_count = 0
+
+precedence = (
+    ('nonassoc', 'IFX'),
+    ('nonassoc', 'ELSE'),
+    ('left', 'OR'),
+    ('left', 'AND'),
+    ('right', 'NOT'),  
+    ('left', 'EQ', 'NE', 'LT', 'GT', 'LE', 'GE'),
+    ('left', 'PLUS', 'MINUS'),
+    ('left', 'TIMES', 'DIVIDE'),
+)
+
+def new_label():
+    global label_count
+    label = f"L{label_count}"
+    label_count += 1
+    return label
+
+# Função para concatenação segura de strings, evitando None
+def concat_safe(*args):
+    return "".join([str(arg) if arg is not None else "" for arg in args])
 
 # Regra inicial
 def p_Z(p):
     'Z : expressao'
     global output
-    p[0] = p[1]
+    output = p[1] if p[1] is not None else ""  # Corrigido para evitar None
+    p[0] = output
 
-# Regra para expressao
+# Regra para a expressão
 def p_expressao(p):
-    '''expressao : declaracao_programa declaracao_var declaracao_end_begin
-                 | declaracao_programa declaracao_end_begin'''
-    p[0] = p[1]
+    '''expressao : declaracao_programa declaracao_var bloco_programa'''
+    p[0] = p[3] if p[3] is not None else ""  # Protege contra None
 
-# Regra para declaracao_programa
+# Regra para declaração do programa
 def p_declaracao_programa(p):
     'declaracao_programa : PROGRAM IDENTIFIER SEMICOLON'
-    p[0] = p[2]  # Retorna o identificador do programa
+    p[0] = ""
 
-# Regra para declaracao_var
+# Regra para declaração de variáveis
 def p_declaracao_var(p):
-    '''declaracao_var : VAR lista_variaveis COLON tipo SEMICOLON
-                      | declaracao_var lista_variaveis COLON tipo SEMICOLON'''
+    '''declaracao_var : VAR declaracoes_variaveis
+                      | empty'''
+    p[0] = ""
+
+# Regra para declarações de variáveis
+def p_declaracoes_variaveis(p):
+    '''declaracoes_variaveis : lista_variaveis COLON tipo SEMICOLON
+                             | declaracoes_variaveis lista_variaveis COLON tipo SEMICOLON'''
     global symbol_table
-    if len(p) == 6:  # Caso base: VAR lista_variaveis COLON tipo SEMICOLON
-        for var in p[2]:
-            symbol_table[var] = None  # Inicializa as variáveis na tabela de símbolos
-    else:  # Caso recursivo: declaracao_var lista_variaveis COLON tipo SEMICOLON
+    if len(p) == 5:
+        for var in p[1]:
+            symbol_table[var] = None
+    else:
         for var in p[2]:
             symbol_table[var] = None
-    p[0] = f"Variáveis: {p[2]} do tipo {p[4]}"
+    p[0] = ""
 
-# Regra para lista_variaveis
+# Regra para lista de variáveis
 def p_lista_variaveis(p):
     '''lista_variaveis : IDENTIFIER
                        | IDENTIFIER COMMA lista_variaveis'''
-    if len(p) == 2:  # Caso base: IDENTIFIER
+    if len(p) == 2:
         p[0] = [p[1]]
-    else:  # Caso recursivo: IDENTIFIER COMMA lista_variaveis
+    else:
         p[0] = [p[1]] + p[3]
 
 # Regra para tipo
@@ -51,86 +79,276 @@ def p_tipo(p):
             | STRING'''
     p[0] = p[1]
 
-# Regra para declaracao_end_begin
-def p_declaracao_end_begin(p):
-    '''declaracao_end_begin : BEGIN corpo END DOT'''
-    p[0] = p[2]  # Retorna o corpo
+# Regra para o bloco do programa
+def p_bloco_programa(p):
+    'bloco_programa : bloco DOT'
+    p[0] = p[1] if p[1] is not None else ""  # Protege contra None
 
-# Regra para corpo
-def p_corpo(p):
-    '''corpo : comando
-             | comando corpo'''
-    if len(p) == 2:
-        p[0] = p[1]
-    else:
-        p[0] = p[1] + p[2]
+# Regra para o bloco
+def p_bloco(p):
+    'bloco : BEGIN lista_comandos END'
+    p[0] = p[2] if p[2] is not None else ""  # Protege contra None
 
-# Regra para comando
+# Regra para lista de comandos
+def p_lista_comandos(p):
+    '''lista_comandos : comando
+                      | lista_comandos comando'''
+    p[0] = concat_safe(p[1], p[2] if len(p) == 3 else "")
+
+# Regras para comandos
 def p_comando(p):
-    '''comando : atribuicao
-               | write'''
-    p[0] = p[1]
+    '''comando : comando_simples
+               | comando_composto'''
+    p[0] = p[1] if p[1] is not None else ""  # Protege contra None
 
-# Regra para atribuicao
+# Regras para comandos simples (atribuição, write, if, while)
+def p_comando_simples(p):
+    '''comando_simples : atribuicao
+                       | write
+                       | comando_if
+                       | comando_while
+                       | comando_for
+                       | read'''
+    p[0] = p[1] if p[1] is not None else ""  # Protege contra None
+
+# Regras para comandos compostos (bloco)
+def p_comando_composto(p):
+    'comando_composto : bloco SEMICOLON'
+    p[0] = p[1] if p[1] is not None else ""  # Protege contra None
+
+# Regras para atribuição
 def p_atribuicao(p):
     'atribuicao : IDENTIFIER ASSIGN expressao_aritmetica SEMICOLON'
-    global output, symbol_table
     if p[1] in symbol_table:
-        output += f"{p[3]}"  # Usa o código gerado pela expressao_aritmetica
-        output += f"STOREG {list(symbol_table.keys()).index(p[1])}\n"
+        codigo = concat_safe(p[3], f"STOREG {list(symbol_table.keys()).index(p[1])}\n")
+        p[0] = codigo
     else:
         print(f"Erro: Variável '{p[1]}' não declarada.")
-    p[0] = output
+        p[0] = ""
 
-# Regra para expressao_aritmetica
+# Regras para expressões aritméticas
 def p_expressao_aritmetica(p):
     '''expressao_aritmetica : termo
-                            | expressao_aritmetica PLUS termo'''
-    global output
+                            | expressao_aritmetica PLUS termo
+                            | expressao_aritmetica MINUS termo
+                            | expressao_aritmetica TIMES termo
+                            | expressao_aritmetica DIVIDE termo
+                            | expressao_aritmetica INTDIV termo'''
     if len(p) == 2:
-        p[0] = p[1]
-    else:
-        p[0] = p[1] + p[3] + "ADD\n"  # Gera o código para a soma
+        p[0] = p[1] if p[1] is not None else ""
+    elif p[2] == '+':
+        p[0] = concat_safe(p[1], p[3], "ADD\n")
+    elif p[2] == '-':
+        p[0] = concat_safe(p[1], p[3], "SUB\n")
+    elif p[2] == '*':
+        p[0] = concat_safe(p[1], p[3], "MUL\n")
+    elif p[2] == '/':
+        p[0] = concat_safe(p[1], p[3], "DIV\n")
+    elif p[2].lower() == 'div':  # INTDIV é 'div' em Pascal
+        p[0] = concat_safe(p[1], p[3], "IDIV\n")  #DIV ou IDIV (verificar VM)
 
-# Regra para termo
+# Regras para termos
 def p_termo(p):
-    '''termo : NUMBER
-             | IDENTIFIER'''
-    global output, symbol_table
-    if isinstance(p[1], int):  # Número
+    '''termo : LPAREN expressao_aritmetica RPAREN
+             | NUMBER
+             | IDENTIFIER
+             | TEXT'''
+    if len(p) == 4:
+        # Caso com parênteses: apenas retorna o código da expressão interna
+        p[0] = p[2]
+    elif isinstance(p[1], int):
         p[0] = f"PUSHI {p[1]}\n"
-    elif p[1] in symbol_table:  # Variável
+    elif isinstance(p[1], str) and (p[1].startswith("'") or p[1].startswith('"')):
+        p[0] = f'PUSHS "{p[1][1:-1]}"\n'
+    elif p[1] in symbol_table:
         p[0] = f"PUSHG {list(symbol_table.keys()).index(p[1])}\n"
     else:
-        print(f"Erro: Variável '{p[1]}' não declarada.")
+        print(f"Erro: Valor ou variável '{p[1]}' não reconhecido.")
+        p[0] = ""
 
-# Regra para write
-def p_write(p):
-    '''write : WRITELN LPAREN argumentos RPAREN SEMICOLON'''
-    global output, symbol_table
-    for arg in p[3]:  # Processa cada argumento
-        if isinstance(arg, str) and (arg.startswith("'") or arg.startswith('"')):  # Caso seja texto
-            output += f'PUSHS "{arg[1:-1]}"\nWRITES\n'
-        elif arg in symbol_table:  # Caso seja uma variável
-            output += f"PUSHG {list(symbol_table.keys()).index(arg)}\nWRITEI\n"
+
+# Regras para writeln
+def p_writeln(p):
+    'write : WRITELN LPAREN argumentos RPAREN SEMICOLON'
+    codigo = ""
+    for arg in p[3]:
+        if isinstance(arg, str) and (arg.startswith("'") or arg.startswith('"')):
+            codigo += f'PUSHS "{arg[1:-1]}"\nWRITES\n'
+        elif arg in symbol_table:
+            codigo += f"PUSHG {list(symbol_table.keys()).index(arg)}\nWRITEI\n"
         else:
             print(f"Erro: Argumento '{arg}' não reconhecido.")
-    p[0] = output
+    p[0] = codigo if codigo else ""  # Protege contra None
 
-# Regra para argumentos
+# Regras para write
+def p_write(p):
+    'write : WRITE LPAREN argumentos RPAREN SEMICOLON'
+    codigo = ""
+    for arg in p[3]:
+        if isinstance(arg, str) and (arg.startswith("'") or arg.startswith('"')):
+            codigo += f'PUSHS "{arg[1:-1]}"\nWRITES\n'  # WRITES já escreve sem newline
+        elif arg in symbol_table:
+            codigo += f"PUSHG {list(symbol_table.keys()).index(arg)}\nWRITEI\n"
+        else:
+            print(f"Erro: Argumento '{arg}' não reconhecido.")
+    p[0] = codigo if codigo else ""
+
+# Regras para readln
+def p_readln(p):
+    'read : READLN LPAREN argumentos RPAREN SEMICOLON'
+    codigo = ""
+    for arg in p[3]:
+        if arg in symbol_table:
+            var_index = list(symbol_table.keys()).index(arg)
+            codigo += f"READ\nSTOREG {var_index}\n"
+        else:
+            print(f"Erro: Variável '{arg}' não declarada.")
+    p[0] = codigo if codigo else ""  # Protege contra None
+
+
+# Regras para argumentos
 def p_argumentos(p):
     '''argumentos : argumento
                   | argumento COMMA argumentos'''
-    if len(p) == 2:  # Caso base: um único argumento
+    if len(p) == 2:
         p[0] = [p[1]]
-    else:  # Caso recursivo: argumento COMMA argumentos
+    else:
         p[0] = [p[1]] + p[3]
 
-# Regra para argumento
+# Regras para argumento
 def p_argumento(p):
     '''argumento : TEXT
                  | IDENTIFIER'''
-    p[0] = p[1]
+    p[0] = p[1] if p[1] is not None else ""  # Protege contra None
+
+# Regras para expressões condicionais lógicas (AND / OR)
+def p_expressao_condicional_logica(p):
+    '''expressao_condicional : expressao_condicional AND expressao_condicional
+                             | expressao_condicional OR expressao_condicional'''
+    if p[2] == 'AND':
+        p[0] = concat_safe(p[1], p[3], "AND\n")
+    elif p[2] == 'OR':
+        p[0] = concat_safe(p[1], p[3], "OR\n")
+
+
+# Regras para expressões condicionais
+def p_expressao_condicional(p):
+    '''expressao_condicional : expressao_aritmetica GT expressao_aritmetica
+                             | expressao_aritmetica LT expressao_aritmetica
+                             | expressao_aritmetica GE expressao_aritmetica
+                             | expressao_aritmetica LE expressao_aritmetica
+                             | expressao_aritmetica EQ expressao_aritmetica
+                             | expressao_aritmetica NE expressao_aritmetica'''
+    if p[2] == '>':
+        op = 'GT'
+    elif p[2] == '<':
+        op = 'LT'
+    elif p[2] == '>=':
+        op = 'GE'
+    elif p[2] == '<=':
+        op = 'LE'
+    elif p[2] == '=':
+        op = 'EQ'
+    elif p[2] == '<>':
+        op = 'NE'
+    else:
+        raise ValueError(f"Operador desconhecido: {p[2]}")
+
+    p[0] = concat_safe(p[1], p[3], f"{op}\n")
+
+# Regras para NOT
+def p_expressao_condicional_not(p):
+    '''expressao_condicional : NOT expressao_condicional'''
+    p[0] = concat_safe(p[2], "NOT\n")
+
+# Regras para expressões booleanas (com parênteses)
+def p_expressao_condicional_paren(p):
+    'expressao_condicional : LPAREN expressao_condicional RPAREN'
+    p[0] = p[2] if p[2] is not None else ""  # Protege contra None
+
+
+# Regras para comandos if           
+def p_comando_if(p):
+    '''comando_if : IF expressao_condicional THEN comando %prec IFX
+                  | IF expressao_condicional THEN comando ELSE comando'''
+    false_label = new_label()
+    end_label = new_label()
+    if len(p) == 5:
+        # Para a expressão 'not (a > b) or (a = 5 and b = 10)', deve-se calcular o valor corretamente antes
+        codigo = concat_safe(p[2], f"JZ {false_label}\n", p[4], f"{false_label}:\n")
+    else:
+        codigo = concat_safe(p[2], f"JZ {false_label}\n", p[4], f"JUMP {end_label}\n", f"{false_label}:\n", p[6], f"{end_label}:\n")
+    p[0] = codigo
+
+
+# Regras para o comando while
+def p_comando_while(p):
+    'comando_while : WHILE expressao_condicional DO comando'
+    start_label = new_label()
+    end_label = new_label()
+    p[0] = f"{start_label}:\n{p[2]}JZ {end_label}\n{p[4]}JUMP {start_label}\n{end_label}:\n"
+
+# Regras para o comando for
+def p_comando_for(p):
+    '''comando_for : FOR IDENTIFIER ASSIGN expressao_aritmetica TO expressao_aritmetica DO comando'''
+    start_label = new_label()
+    end_label = new_label()
+
+    var_index = list(symbol_table.keys()).index(p[2])
+    
+    # Inicialização da variável de controlo
+    init = p[4] + f"STOREG {var_index}\n"
+
+    # Condição: se var > limite, salta
+    cond = (f"{start_label}:\n" +
+            f"PUSHG {var_index}\n" + 
+            p[6] +
+            "GT\n" +
+            f"JZ {end_label}\n")
+
+    # Corpo do ciclo + incremento
+    corpo = p[8]
+    inc = (f"PUSHG {var_index}\n" +
+           "PUSHI 1\n" +
+           "ADD\n" +
+           f"STOREG {var_index}\n" +
+           f"JUMP {start_label}\n" +
+           f"{end_label}:\n")
+
+    p[0] = init + cond + corpo + inc
+
+# Regras para o comando for com DOWNTO
+def p_comando_for_downto(p):
+    '''comando_for : FOR IDENTIFIER ASSIGN expressao_aritmetica DOWNTO expressao_aritmetica DO comando'''
+    start_label = new_label()
+    end_label = new_label()
+
+    var_index = list(symbol_table.keys()).index(p[2])
+
+    init = p[4] + f"STOREG {var_index}\n"
+
+    cond = (f"{start_label}:\n" +
+            f"PUSHG {var_index}\n" +
+            p[6] +
+            "LT\n" +  # Se i < limite inferior, termina
+            f"JZ {end_label}\n")
+
+    corpo = p[8]
+
+    dec = (f"PUSHG {var_index}\n" +
+           "PUSHI 1\n" +
+           "SUB\n" +
+           f"STOREG {var_index}\n" +
+           f"JUMP {start_label}\n" +
+           f"{end_label}:\n")
+
+    p[0] = init + cond + corpo + dec
+
+
+# Regras para o comando empty
+def p_empty(p):
+    'empty :'
+    p[0] = ""
 
 # Tratamento de erros
 def p_error(p):
@@ -140,16 +358,15 @@ def p_error(p):
     else:
         print("Erro inesperado no final do input.")
 
-# Construção do parser
-parser = yacc.yacc()
+# Cria o parser
+parser = yacc.yacc(debug=True, write_tables=False)
+parser.trace = False
 
-# Leitura da entrada do arquivo
 if __name__ == "__main__":
     try:
         entrada = sys.stdin.read()
-        entrada = re.sub(r'\s{2,}', ' ', entrada)  # Remove espaços extras
+        entrada = re.sub(r'\s{2,}', ' ', entrada)
         conversor = parser.parse(entrada)
         print("Resultado: \n", output)
     except Exception as e:
         print("Erro ao processar entrada:", e)
-

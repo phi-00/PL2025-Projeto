@@ -55,16 +55,17 @@ tokens = [
     'ARRAY',
     'OF',
     'TEXT',
-    'COMMENT',
+    #'COMMENT',
 ]
 
 def t_TEXT(t):
-    r'\'.*\''
+    r'\'([^\\\']|\\.)*\''
     return t
+
 
 def t_COMMENT(t):
     r'\{[^\}]*\}'
-    return t
+    pass
 
 
 # Expressões regulares para tokens simples (literals)

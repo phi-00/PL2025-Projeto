@@ -31,7 +31,7 @@ tokens = [
     'TIMES',
     'DIVIDE',
     'INTDIV',
-    'MODULE',
+    'MOD',
     'ASSIGN',
     'LPAREN',
     'RPAREN',
@@ -55,6 +55,9 @@ tokens = [
     'ARRAY',
     'OF',
     'TEXT',
+    'TRUE',
+    'FALSE',
+    'DOTDOT',
     #'COMMENT',
 ]
 
@@ -88,13 +91,14 @@ t_LE = r'<='
 t_GE = r'>='
 t_EQ = r'='
 t_NE = r'<>'
+t_DOTDOT = r'\.\.'
 
 
 def t_INTDIV(t):
     r'(?i:div)'
     return t
 
-def t_MODULE(t):
+def t_MOD(t):
     r'(?i:mod)'
     return t
 
@@ -156,6 +160,17 @@ def t_BOOLEAN(t):
     r'(?i:boolean)'
     return t
 
+def t_TRUE(t):
+    r'(?i:true)'
+    t.value = True
+    return t
+
+def t_FALSE(t):
+    r'(?i:false)'
+    t.value = False
+    return t
+
+
 def t_STRING(t):
     r'(?i:string)'
     return t
@@ -163,6 +178,12 @@ def t_STRING(t):
 def t_CHAR(t):
     r'(?i:char)'
     return t
+
+def t_CHAR_LITERAL(t):
+    r"'([^\\']|\\.)'"  # Caractere entre aspas simples
+    t.value = t.value[1:-1]  # Remove as aspas
+    return t
+
 
 def t_ARRAY(t):
     r'(?i:array)'

@@ -58,6 +58,7 @@ tokens = [
     'TRUE',
     'FALSE',
     'DOTDOT',
+    'LENGTH',
     #'COMMENT',
 ]
 
@@ -145,6 +146,10 @@ def t_NOT(t):
 
 def t_WHILE(t):
     r'(?i:while)'
+    return t
+
+def t_LENGTH(t):
+    r'(?i:length)'
     return t
 
 # Declaração de variáveis

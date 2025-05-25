@@ -127,16 +127,23 @@ def p_bloco(p):
     p[0] = p[2] if p[2] is not None else ""  # Protege contra None
 
 # Regra para lista de comandos
-def p_lista_comandos(p):
-    '''lista_comandos : comando
-                      | lista_comandos comando'''
-    p[0] = concat_safe(p[1], p[2] if len(p) == 3 else "")
+def p_lista_comandos_1(p):
+    'lista_comandos : comando'
+    p[0] = p[1]
+
+def p_lista_comandos_2(p):
+    'lista_comandos : lista_comandos comando SEMICOLON'
+    p[0] = concat_safe(p[1], p[2])
+
+def p_lista_comandos_3(p):
+    'lista_comandos : lista_comandos comando'
+    p[0] = concat_safe(p[1], p[2])
 
 # Regras para comandos
 def p_comando(p):
     '''comando : comando_simples
                | comando_composto'''
-    p[0] = p[1] if p[1] is not None else ""  # Protege contra None
+    p[0] = p[1] if p[1] is not None else ""
 
 # Regras para comandos simples (atribuição, write, if, while)
 def p_comando_simples(p):
@@ -151,8 +158,9 @@ def p_comando_simples(p):
 
 # Regras para comandos compostos (bloco)
 def p_comando_composto(p):
-    'comando_composto : bloco SEMICOLON'
-    p[0] = p[1] if p[1] is not None else ""  # Protege contra None
+    '''comando_composto : bloco
+                        | bloco SEMICOLON'''
+    p[0] = p[1] if p[1] is not None else ""
 
 # Regras para atribuição
 def p_atribuicao(p):
@@ -303,7 +311,8 @@ def p_termo(p):
              | IDENTIFIER
              | TEXT
              | TRUE
-             | FALSE'''
+             | FALSE
+             | LENGTH LPAREN IDENTIFIER RPAREN'''
     if len(p) == 2:
         if p.slice[1].type == 'NUMBER':
             p[0] = f"PUSHI {p[1]}\n"
@@ -322,7 +331,17 @@ def p_termo(p):
                 print(f"Erro: variável '{var}' não declarada.")
                 p[0] = ""
     elif len(p) == 4:
-        p[0] = p[2]  # Para parênteses (expressão)
+        p[0] = p[2]  # Expressão entre parênteses
+    elif len(p) == 5 and p.slice[1].type == 'LENGTH':
+        var = p[3]
+        if var in symbol_table:
+            tipo = symbol_table[var]['type']
+            addr = symbol_table[var]['address']
+            if tipo.upper() != 'STRING':
+                raise Exception(f"Função length só pode ser usada com strings. '{var}' é do tipo {tipo}.")
+            p[0] = f"PUSHG {addr}\nSTRLEN\n"
+        else:
+            raise Exception(f"Variável '{var}' não declarada.")
 
 def p_termo_array(p):
     '''termo : IDENTIFIER LBRACKET expressao_aritmetica RBRACKET'''
@@ -347,21 +366,40 @@ def p_writeln(p):
         if isinstance(arg, str) and (arg.startswith("'") or arg.startswith('"')):
             codigo += f'PUSHS "{arg[1:-1]}"\nWRITES\n'
 
+        elif isinstance(arg, str) and arg in symbol_table:
+            var_info = symbol_table[arg]
+            tipo = var_info['type']
+            addr = var_info['address']
+            tipo = tipo.upper()
+
+            if tipo == 'BOOLEAN':
+                label_false = new_label()
+                label_end = new_label()
+                codigo += f"PUSHG {addr}\n"
+                codigo += f"JZ {label_false}\n"
+                codigo += f'PUSHS "true"\nWRITES\n'
+                codigo += f"JUMP {label_end}\n"
+                codigo += f"{label_false}:\n"
+                codigo += f'PUSHS "false"\nWRITES\n'
+                codigo += f"{label_end}:\n"
+            elif tipo == 'CHAR':
+                codigo += f"PUSHG {addr}\nWRITEI\n"
+            elif tipo == 'STRING':
+                codigo += f"PUSHG {addr}\nWRITES\n"
+            else:
+                codigo += f"PUSHG {addr}\nWRITEI\n"
+
         elif isinstance(arg, tuple) and arg[0] == 'array':
             nome_array = arg[1]
             indice = arg[2]
 
             if nome_array in symbol_table:
-                tipo = symbol_table[nome_array]['element_type']
-                addr = symbol_table[nome_array]['address']
+                array_info = symbol_table[nome_array]
+                tipo = array_info['element_type']
+                base_addr = array_info['address']
 
-                codigo += f"PUSHI {addr}\n"
-
-                if isinstance(indice, dict) and 'code' in indice:
-                    codigo += indice['code']
-                else:
-                    raise Exception(f"Índice inválido: {indice}")
-
+                codigo += f"PUSHI {base_addr}\n"
+                codigo += indice['code']
                 codigo += "ADD\n"
                 codigo += "LOADN\n"
 
@@ -372,40 +410,21 @@ def p_writeln(p):
                     codigo += f"JZ {label_false}\n"
                     codigo += f'PUSHS "true"\nWRITES\n'
                     codigo += f"JUMP {label_end}\n"
-                    codigo += f"LABEL {label_false}\n"
+                    codigo += f"{label_false}:\n"
                     codigo += f'PUSHS "false"\nWRITES\n'
-                    codigo += f"LABEL {label_end}\n"
+                    codigo += f"{label_end}:\n"
                 elif tipo == 'CHAR':
-                    codigo += "WRITES\n"
+                    codigo += "WRITEI\n"
                 elif tipo == 'STRING':
                     codigo += "WRITES\n"
                 else:
                     codigo += "WRITEI\n"
-
-        elif arg in symbol_table:
-            tipo = symbol_table[arg]['type']
-            addr = symbol_table[arg]['address']
-            tipo = tipo.upper()
-
-            if tipo == 'BOOLEAN':
-                label_false = new_label()
-                label_end = new_label()
-                codigo += f"PUSHG {addr}\n"
-                codigo += f"JZ {label_false}\n"
-                codigo += f'PUSHS "true"\nWRITES\n'
-                codigo += f"JUMP {label_end}\n"
-                codigo += f"LABEL {label_false}\n"
-                codigo += f'PUSHS "false"\nWRITES\n'
-                codigo += f"LABEL {label_end}\n"
-            elif tipo == 'CHAR':
-                codigo += f"PUSHG {addr}\nWRITES\n"
-            elif tipo == 'STRING':
-                codigo += f"PUSHG {addr}\nWRITES\n"
             else:
-                codigo += f"PUSHG {addr}\nWRITEI\n"
+                print(f"Erro: Array '{nome_array}' não declarado.")
+        else:
+            print(f"Erro: Argumento inválido em writeln: {arg}")
 
     p[0] = codigo
-
 
 # Regras para write
 def p_write(p):
@@ -416,80 +435,105 @@ def p_write(p):
             # Constante string
             codigo += f'PUSHS "{arg[1:-1]}"\nWRITES\n'
 
-        elif isinstance(arg, tuple) and arg[0] == 'array':
-            nome_array = arg[1]
-            indice = arg[2]
-
-            if nome_array in symbol_table:
-                tipo = symbol_table[nome_array]['element_type']
-                addr = symbol_table[nome_array]['address']
-
-                codigo += f"PUSHI {addr}\n"
-
-                if isinstance(indice, dict) and 'code' in indice:
-                    codigo += indice['code']
-                else:
-                    raise Exception(f"Índice inválido: {indice}")
-
-                codigo += "ADD\n"
-
-                if tipo == 'BOOLEAN':
-                    label_false = new_label()
-                    label_end = new_label()
-                    codigo += f"JZ {label_false}\n"
-                    codigo += f'PUSHS "true"\nWRITES\n'
-                    codigo += f"JUMP {label_end}\n"
-                    codigo += f"LABEL {label_false}\n"
-                    codigo += f'PUSHS "false"\nWRITES\n'
-                    codigo += f"LABEL {label_end}\n"
-                elif tipo == 'CHAR':
-                    codigo += "LOADN\nWRITEI\n"
-                else:
-                    codigo += "LOADN\nWRITEI\n"
-
-        elif arg in symbol_table:
+        elif isinstance(arg, str) and arg in symbol_table:
             var_info = symbol_table[arg]
             tipo = var_info['type']
             addr = var_info['address']
+            tipo = tipo.upper()
 
-            if tipo == 'STRING':
-                codigo += f"PUSHG {addr}\nWRITES\n"
-            elif tipo == 'CHAR':
-                codigo += f"PUSHG {addr}\nWRITEI\n"  
-            elif tipo == 'BOOLEAN':
+            if tipo == 'BOOLEAN':
                 label_false = new_label()
                 label_end = new_label()
                 codigo += f"PUSHG {addr}\n"
                 codigo += f"JZ {label_false}\n"
                 codigo += f'PUSHS "true"\nWRITES\n'
                 codigo += f"JUMP {label_end}\n"
-                codigo += f"LABEL {label_false}\n"
+                codigo += f"{label_false}:\n"
                 codigo += f'PUSHS "false"\nWRITES\n'
-                codigo += f"LABEL {label_end}\n"
-            else:
+                codigo += f"{label_end}:\n"
+            elif tipo == 'CHAR':
+                codigo += f"PUSHG {addr}\nWRITEI\n"
+            elif tipo == 'STRING':
                 codigo += f"PUSHG {addr}\nWRITES\n"
+            else:
+                codigo += f"PUSHG {addr}\nWRITEI\n"
 
+        elif isinstance(arg, tuple) and arg[0] == 'array':
+            nome_array = arg[1]
+            indice = arg[2]
+
+            if nome_array in symbol_table:
+                array_info = symbol_table[nome_array]
+                tipo = array_info['element_type']
+                base_addr = array_info['address']
+
+                codigo += f"PUSHI {base_addr}\n"
+                codigo += indice['code']
+                codigo += "ADD\n"
+                codigo += "LOADN\n"
+
+                tipo = tipo.upper()
+                if tipo == 'BOOLEAN':
+                    label_false = new_label()
+                    label_end = new_label()
+                    codigo += f"JZ {label_false}\n"
+                    codigo += f'PUSHS "true"\nWRITES\n'
+                    codigo += f"JUMP {label_end}\n"
+                    codigo += f"{label_false}:\n"
+                    codigo += f'PUSHS "false"\nWRITES\n'
+                    codigo += f"{label_end}:\n"
+                elif tipo == 'CHAR':
+                    codigo += "WRITEI\n"
+                elif tipo == 'STRING':
+                    codigo += "WRITES\n"
+                else:
+                    codigo += "WRITEI\n"
+            else:
+                print(f"Erro: Array '{nome_array}' não declarado.")
         else:
-            print(f"Erro: Argumento '{arg}' não reconhecido ou não declarado.")
+            print(f"Erro: Argumento inválido em write: {arg}")
 
     p[0] = codigo if codigo else ""
-
-
 
 # Regras para readln
 def p_readln(p):
     'read : READLN LPAREN argumentos RPAREN SEMICOLON'
     codigo = ""
     for arg in p[3]:
-        if arg in symbol_table:
-            var_index = list(symbol_table.keys()).index(arg)
-            if symbol_table[arg]['type'] == 'CHAR':
-                codigo += f"READC\nSTOREG {var_index}\n"  # Para char
+        if isinstance(arg, str) and arg in symbol_table:
+            var_info = symbol_table[arg]
+            addr = var_info['address']
+            tipo = var_info['type']
+
+            if tipo == 'CHAR':
+                codigo += f"READC\nSTOREG {addr}\n"
             else:
-                codigo += f"READ\nSTOREG {var_index}\n"
+                codigo += f"READ\nSTOREG {addr}\n"
+
+        elif isinstance(arg, tuple) and arg[0] == 'array':
+            nome_array = arg[1]
+            indice = arg[2]  # {'code': código da expressão índice}
+
+            if nome_array in symbol_table:
+                array_info = symbol_table[nome_array]
+                tipo = array_info['element_type']
+                base_addr = array_info['address']
+
+                # Gera o código para calcular o endereço final do elemento do array
+                codigo += f"PUSHI {base_addr}\n"
+                codigo += indice['code']
+                codigo += "ADD\n"
+
+                if tipo.upper() == 'CHAR':
+                    codigo += "READC\nSTOREN\n"
+                else:
+                    codigo += "READ\nSTOREN\n"
+            else:
+                print(f"Erro: Array '{nome_array}' não declarado.")
         else:
-            print(f"Erro: Variável '{arg}' não declarada.")
-    p[0] = codigo if codigo else ""  # Protege contra None
+            print(f"Erro: argumento inválido em readln: {arg}")
+
+    p[0] = codigo if codigo else ""
 
 
 # Regras para argumentos
@@ -536,22 +580,67 @@ def p_expressao_condicional(p):
                              | expressao_aritmetica LE expressao_aritmetica
                              | expressao_aritmetica EQ expressao_aritmetica
                              | expressao_aritmetica NE expressao_aritmetica'''
-    if p[2] == '>':
-        op = 'SUP'
-    elif p[2] == '<':
-        op = 'INF'
-    elif p[2] == '>=':
-        op = 'GE'
-    elif p[2] == '<=':
-        op = 'LE'
-    elif p[2] == '=':
-        op = 'EQ'
-    elif p[2] == '<>':
-        op = 'NE'
-    else:
-        raise ValueError(f"Operador desconhecido: {p[2]}")
+    op = p[2]
+    code_left = p[1]
+    code_right = p[3]
 
-    p[0] = concat_safe(p[1], p[3], f"{op}\n")
+    if op == '>':
+        p[0] = concat_safe(code_left, code_right, "SUP\n")
+    elif op == '<':
+        p[0] = concat_safe(code_left, code_right, "INF\n")
+    elif op == '>=':
+        label_true = new_label()
+        label_end = new_label()
+        p[0] = (
+            concat_safe(code_left, code_right) +
+            "INF\n" +
+            f"JZ {label_true}\n" +
+            "PUSHI 0\n" +
+            f"JUMP {label_end}\n" +
+            f"{label_true}:\n" +
+            "PUSHI 1\n" +
+            f"{label_end}:\n"
+        )
+    elif op == '<=':
+        label_true = new_label()
+        label_end = new_label()
+        p[0] = (
+            concat_safe(code_left, code_right) +
+            "SUP\n" +
+            f"JZ {label_true}\n" +
+            "PUSHI 0\n" +
+            f"JUMP {label_end}\n" +
+            f"{label_true}:\n" +
+            "PUSHI 1\n" +
+            f"{label_end}:\n"
+        )
+    elif op == '=':
+        label_true = new_label()
+        label_end = new_label()
+        p[0] = (
+            concat_safe(code_left, code_right) +
+            "SUB\n" +
+            f"JZ {label_true}\n" +
+            "PUSHI 0\n" +
+            f"JUMP {label_end}\n" +
+            f"{label_true}:\n" +
+            "PUSHI 1\n" +
+            f"{label_end}:\n"
+        )
+    elif op == '<>':
+        label_false = new_label()
+        label_end = new_label()
+        p[0] = (
+            concat_safe(code_left, code_right) +
+            "SUB\n" +
+            f"JZ {label_false}\n" +
+            "PUSHI 1\n" +
+            f"JUMP {label_end}\n" +
+            f"{label_false}:\n" +
+            "PUSHI 0\n" +
+            f"{label_end}:\n"
+        )
+
 
 # Regras para NOT
 def p_expressao_condicional_not(p):
@@ -563,6 +652,9 @@ def p_expressao_condicional_paren(p):
     'expressao_condicional : LPAREN expressao_condicional RPAREN'
     p[0] = p[2] if p[2] is not None else ""  # Protege contra None
 
+def p_expressao_condicional_bool_expr(p):
+    'expressao_condicional : expressao_aritmetica'
+    p[0] = p[1]
 
 # Regras para comandos if           
 def p_comando_if(p):
@@ -571,11 +663,9 @@ def p_comando_if(p):
     false_label = new_label()
     end_label = new_label()
     if len(p) == 5:
-        # Para a expressão 'not (a > b) or (a = 5 and b = 10)', deve-se calcular o valor corretamente antes
-        codigo = concat_safe(p[2], f"JZ {false_label}\n", p[4], f"{false_label}:\n")
+        p[0] = concat_safe(p[2], f"JZ {false_label}\n", p[4], f"{false_label}:\n")
     else:
-        codigo = concat_safe(p[2], f"JZ {false_label}\n", p[4], f"JUMP {end_label}\n", f"{false_label}:\n", p[6], f"{end_label}:\n")
-    p[0] = codigo
+        p[0] = concat_safe(p[2], f"JZ {false_label}\n", p[4], f"JUMP {end_label}\n", f"{false_label}:\n", p[6], f"{end_label}:\n")
 
 
 # Regras para o comando while

@@ -5,6 +5,7 @@ import sys
 output = ""  # Variável global para armazenar o código gerado
 symbol_table = {}  # Tabela de símbolos para armazenar variáveis e seus valores
 label_count = 0
+next_free_address = 0
 
 precedence = (
     ('nonassoc', 'IFX'),
@@ -64,10 +65,11 @@ def p_declaracoes_variaveis(p):
         tipo = p[4]
 
     for var in var_list:
+        global next_free_address  # ← Necessário para poder alterar a variável global
         if isinstance(tipo, tuple) and tipo[0] == 'ARRAY':
             start_idx, end_idx = tipo[1], tipo[2]
             size = end_idx - start_idx + 1
-            address = len(symbol_table)
+            address = next_free_address  # Usamos next_free_address
 
             symbol_table[var] = {
                 'type': 'ARRAY',
@@ -76,13 +78,7 @@ def p_declaracoes_variaveis(p):
                 'address': address
             }
 
-            for i in range(size):
-                symbol_table[f"{var}[{i}]"] = {
-                    'address': address + i,
-                    'type': tipo[3]
-                }
-
-
+            next_free_address += size  # Reserva o número de posições do array
         else:
             if var not in symbol_table:
                 address = len(symbol_table)
@@ -198,41 +194,81 @@ def p_atribuicao(p):
 # Regras para atribuição de array
 def p_atribuicao_array(p):
     'atribuicao : IDENTIFIER LBRACKET expressao_aritmetica RBRACKET ASSIGN expressao_aritmetica SEMICOLON'
-    var = p[1]
+
+    global next_free_address
+
+    nome_array = p[1]
     index_code = p[3]
     value_code = p[6]
-    
-    # Verifica se a variável é um array
-    if var in symbol_table and symbol_table[var]['type'] == 'ARRAY':
-        var_info = symbol_table[var]
-        start = var_info['range'][0]
-        end = var_info['range'][1]
-        
-        # Verifica se o índice está dentro do intervalo válido
-        erro_label = new_label()
-        fim_label = new_label()
-        check_index_code = concat_safe(index_code,
-                               f"PUSHI {start}\nINF\nJZ {erro_label}\n",
-                               index_code,
-                               f"PUSHI {end}\nSUP\nJZ {erro_label}\n",
-                               f"JUMP {fim_label}\n",
-                               f"{erro_label}:\nPUSHS \"Index out of bounds\"\nWRITES\n",
-                               f"{fim_label}:\n")
 
-        
-        # Cálculo do endereço do índice
-        offset_code = concat_safe(index_code, f"PUSHI {start}\nSUB\n")
-        calc_addr = concat_safe(offset_code, f"PUSHI {var_info['address']}\nADD\n")
-        
-        # Gerar código de armazenamento
-        store_code = concat_safe(calc_addr, value_code, "STOREN\n")
-        
-        # Junta as instruções
-        p[0] = concat_safe(check_index_code, store_code)
-    else:
-        print(f"Erro: '{var}' não é um array declarado.")
-        p[0] = ""
+    if nome_array not in symbol_table:
+        raise Exception(f"Array '{nome_array}' não declarado.")
 
+    array_info = symbol_table[nome_array]
+    addr = array_info['address']
+    start = array_info['range'][0]
+    end = array_info['range'][1]
+
+    import re
+    # Se índice é constante, atribui direto com STOREG
+    match = re.match(r'PUSHI (\d+)', index_code.strip())
+    if match:
+        idx_val = int(match.group(1))
+        if idx_val < start or idx_val > end:
+            raise Exception(f"Índice {idx_val} fora dos limites.")
+        desloc = idx_val - start
+        endereco_final = addr + desloc
+        p[0] = value_code + f"STOREG {endereco_final}\n"
+        return
+
+    # Índice variável: guarda índice numa variável temporária
+    temp_idx_var = f"__temp_idx_{new_label()}"
+    temp_idx_addr = next_free_address
+    symbol_table[temp_idx_var] = {
+        'address': temp_idx_addr,
+        'type': 'INTEGER',
+        'value': None
+    }
+    next_free_address += 1
+
+    index_store = index_code + f"STOREG {temp_idx_addr}\n"
+
+    # Verificação de limites
+    bounds_fail_label = new_label()
+    bounds_ok_label = new_label()
+
+    bounds_check = (
+        f"PUSHG {temp_idx_addr}\nPUSHI {start}\nINF\n"
+        f"JZ {bounds_fail_label}\n"
+        f"PUSHG {temp_idx_addr}\nPUSHI {end}\nSUP\n"
+        f"JZ {bounds_fail_label}\n"
+        f"JUMP {bounds_ok_label}\n"
+        f"{bounds_fail_label}:\n"
+        f'PUSHS "Index out of bounds"\nWRITES\n'
+        f"{bounds_ok_label}:\n"
+    )
+
+    # Gerar cascata IF para cada posição do array
+    if_chain = ""
+    for i in range(start, end + 1):
+        label_true = new_label()
+        label_next = new_label()
+        deslocamento = i - start
+        endereco_real = addr + deslocamento
+
+    if_chain += (
+        f"PUSHG {temp_idx_addr}\n"
+        f"PUSHI {i}\n"
+        "SUB\n"
+        f"JZ {label_true}\n"
+        f"JUMP {label_next}\n"
+        f"{label_true}:\n"
+        + value_code +
+        f"STOREG {endereco_real}\n"
+        f"{label_next}:\n"
+    )
+
+    p[0] = index_store + bounds_check + if_chain
 
 # Regras para expressões aritméticas
 def p_expressao_aritmetica(p):

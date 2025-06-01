@@ -69,13 +69,28 @@ def p_declaracoes_variaveis(p):
         if var in symbol_table:
             print(f"[INFO] Variável '{var}' já declarada — ignorada.")
             continue
-
+        
         addr = len(symbol_table)
-        symbol_table[var] = {
-            'address': addr,
-            'type': tipo,
-            'value': None
-        }
+    
+        if isinstance(tipo, tuple) and tipo[0] == 'ARRAY':
+            lower_bound = tipo[1]
+            upper_bound = tipo[2]
+            element_type = tipo[3]
+    
+            symbol_table[var] = {
+                'address': addr,
+                'type': 'ARRAY',
+                'range': (lower_bound, upper_bound),
+                'element_type': element_type,
+                'value': None
+            }
+        else:
+            symbol_table[var] = {
+                'address': addr,
+                'type': tipo,
+                'value': None
+            }
+
 
 
 # Regra para lista de variáveis
@@ -114,13 +129,15 @@ def p_bloco(p):
 
 # Regra para lista de comandos
 def p_lista_comandos(p):
-    '''lista_comandos : lista_comandos SEMICOLON comando
-                      | lista_comandos comando
-                      | comando'''
+    '''lista_comandos : comando
+                      | lista_comandos SEMICOLON comando
+                      | lista_comandos SEMICOLON'''
     if len(p) == 2:
         p[0] = p[1]
+    elif len(p) == 3:
+        p[0] = p[1]  # ignora o ; final
     else:
-        p[0] = concat_safe(p[1], p[len(p)-1])
+        p[0] = concat_safe(p[1], p[3])
 
 
 # Regras para comandos
@@ -132,13 +149,9 @@ def p_comando(p):
 # Regras para comandos simples (atribuição, write, if, while)
 def p_comando_simples(p):
     '''comando_simples : atribuicao
-                       | atribuicao SEMICOLON
                        | write
-                       | write SEMICOLON
                        | writeln
-                       | writeln SEMICOLON
                        | read
-                       | read SEMICOLON
                        | comando_if
                        | comando_while
                        | comando_for'''
@@ -147,8 +160,7 @@ def p_comando_simples(p):
 
 # Regras para comandos compostos (bloco)
 def p_comando_composto(p):
-    '''comando_composto : bloco
-                        | bloco SEMICOLON'''
+    '''comando_composto : bloco'''
     p[0] = p[1] if p[1] is not None else ""
 
 # Regras para atribuição

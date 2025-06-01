@@ -22,8 +22,6 @@ tokens = [
     'AND',
     'OR',
     'NOT',
-    'FUNCTION',
-    'PROCEDURE',
     'IDENTIFIER',
     'NUMBER',
     'PLUS',
@@ -59,7 +57,6 @@ tokens = [
     'FALSE',
     'DOTDOT',
     'LENGTH',
-    #'COMMENT',
 ]
 
 def t_TEXT(t):
@@ -216,14 +213,6 @@ def t_WRITE(t):
     return t
 
 # Inicialização de programas
-
-def t_PROCEDURE(t):
-    r'(?i:procedure)'
-    return t
-
-def t_FUNCTION(t):
-    r'(?i:function)'
-    return t
 
 def t_BEGIN(t):
     r'(?i:begin)'

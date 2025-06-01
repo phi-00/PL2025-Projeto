@@ -16,5 +16,5 @@ begin
     if primo then
         writeln(num, ' é um número primo')
     else
-        writeln(num, ' não é um número primo')
+        writeln(num, ' não é um número primo');
 end.

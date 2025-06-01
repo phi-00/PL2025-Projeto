@@ -18,5 +18,5 @@ begin
         if num2 > num3 then maior := num2
         else maior := num3;
 
-    WriteLn('O maior é: ', maior)
+    WriteLn('O maior é: ', maior);
 end.

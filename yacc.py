@@ -10,14 +10,14 @@ next_free_address = 0
 precedence = (
     ('nonassoc', 'IFX'),
     ('nonassoc', 'ELSE'),
-    ('left', 'OR'),
+    ('right', 'NOT'),
     ('left', 'AND'),
-    ('left', 'MOD'),
-    ('right', 'NOT'),  
+    ('left', 'OR'),
     ('left', 'EQ', 'NE', 'LT', 'GT', 'LE', 'GE'),
     ('left', 'PLUS', 'MINUS'),
-    ('left', 'TIMES', 'DIVIDE'),
+    ('left', 'TIMES', 'DIVIDE', 'INTDIV', 'MOD'),
 )
+
 
 def new_label():
     global label_count
@@ -57,40 +57,26 @@ def p_declaracoes_variaveis(p):
     '''declaracoes_variaveis : lista_variaveis COLON tipo SEMICOLON
                              | declaracoes_variaveis lista_variaveis COLON tipo SEMICOLON'''
     global symbol_table
+
     if len(p) == 5:
         var_list = p[1]
-        tipo = p[3]
+        tipo = p[3].upper() if isinstance(p[3], str) else p[3]
     else:
         var_list = p[2]
-        tipo = p[4]
+        tipo = p[4].upper() if isinstance(p[4], str) else p[4]
 
     for var in var_list:
-        global next_free_address  # ← Necessário para poder alterar a variável global
-        if isinstance(tipo, tuple) and tipo[0] == 'ARRAY':
-            start_idx, end_idx = tipo[1], tipo[2]
-            size = end_idx - start_idx + 1
-            address = next_free_address  # Usamos next_free_address
+        if var in symbol_table:
+            print(f"[INFO] Variável '{var}' já declarada — ignorada.")
+            continue
 
-            symbol_table[var] = {
-                'type': 'ARRAY',
-                'range': (start_idx, end_idx),
-                'element_type': tipo[3],
-                'address': address
-            }
+        addr = len(symbol_table)
+        symbol_table[var] = {
+            'address': addr,
+            'type': tipo,
+            'value': None
+        }
 
-            next_free_address += size  # Reserva o número de posições do array
-        else:
-            if var not in symbol_table:
-                address = len(symbol_table)
-                symbol_table[var] = {
-                    'address': address,
-                    'type': tipo,
-                    'value': None
-                }
-            else:
-                print(f"Erro: Variável '{var}' já declarada.")
-
-    p[0] = ""
 
 # Regra para lista de variáveis
 def p_lista_variaveis(p):
@@ -127,17 +113,15 @@ def p_bloco(p):
     p[0] = p[2] if p[2] is not None else ""  # Protege contra None
 
 # Regra para lista de comandos
-def p_lista_comandos_1(p):
-    'lista_comandos : comando'
-    p[0] = p[1]
+def p_lista_comandos(p):
+    '''lista_comandos : lista_comandos SEMICOLON comando
+                      | lista_comandos comando
+                      | comando'''
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = concat_safe(p[1], p[len(p)-1])
 
-def p_lista_comandos_2(p):
-    'lista_comandos : lista_comandos comando SEMICOLON'
-    p[0] = concat_safe(p[1], p[2])
-
-def p_lista_comandos_3(p):
-    'lista_comandos : lista_comandos comando'
-    p[0] = concat_safe(p[1], p[2])
 
 # Regras para comandos
 def p_comando(p):
@@ -148,13 +132,18 @@ def p_comando(p):
 # Regras para comandos simples (atribuição, write, if, while)
 def p_comando_simples(p):
     '''comando_simples : atribuicao
+                       | atribuicao SEMICOLON
                        | write
+                       | write SEMICOLON
                        | writeln
+                       | writeln SEMICOLON
+                       | read
+                       | read SEMICOLON
                        | comando_if
                        | comando_while
-                       | comando_for
-                       | read'''
-    p[0] = p[1] if p[1] is not None else ""  # Protege contra None
+                       | comando_for'''
+    p[0] = p[1]
+
 
 # Regras para comandos compostos (bloco)
 def p_comando_composto(p):
@@ -164,7 +153,7 @@ def p_comando_composto(p):
 
 # Regras para atribuição
 def p_atribuicao(p):
-    'atribuicao : IDENTIFIER ASSIGN expressao_aritmetica SEMICOLON'
+    'atribuicao : IDENTIFIER ASSIGN expressao_aritmetica'
     var_name = p[1]
     expressao = p[3] if p[3] is not None else ""
 
@@ -201,7 +190,7 @@ def p_atribuicao(p):
 
 # Regras para atribuição de array
 def p_atribuicao_array(p):
-    'atribuicao : IDENTIFIER LBRACKET expressao_aritmetica RBRACKET ASSIGN expressao_aritmetica SEMICOLON'
+    'atribuicao : IDENTIFIER LBRACKET expressao_aritmetica RBRACKET ASSIGN expressao_aritmetica'
 
     global next_free_address
 
@@ -347,20 +336,38 @@ def p_termo_array(p):
     '''termo : IDENTIFIER LBRACKET expressao_aritmetica RBRACKET'''
     var = p[1]
     index_code = p[3]
-    if var in symbol_table and symbol_table[var]['type'] == 'ARRAY':
-        var_info = symbol_table[var]
+
+    if var not in symbol_table:
+        print(f"Erro: variável '{var}' não declarada.")
+        p[0] = ""
+        return
+
+    var_info = symbol_table[var]
+    tipo = var_info['type']
+
+    # Se for uma STRING, trata como array de CHAR
+    if tipo == 'STRING':
+        addr = var_info['address']
+        code = concat_safe(index_code, f"PUSHI {addr}\nADD\nLOADN\n")
+        p[0] = code
+        return
+
+    # Se for ARRAY declarado
+    if isinstance(var_info, dict) and tipo == 'ARRAY':
         start = var_info['range'][0]
         base_addr = var_info['address']
         offset_code = concat_safe(index_code, f"PUSHI {start}\nSUB\n")
         full_code = concat_safe(offset_code, f"PUSHI {base_addr}\nADD\nLOADN\n")
         p[0] = full_code
-    else:
-        print(f"Erro: '{var}' não é um array declarado.")
-        p[0] = ""
+        return
+
+    print(f"Erro: '{var}' não é um array nem uma string indexável.")
+    p[0] = ""
+
 
 # Regras para writeln
 def p_writeln(p):
-    'writeln : WRITELN LPAREN argumentos RPAREN SEMICOLON'
+    'writeln : WRITELN LPAREN argumentos RPAREN'
     codigo = ""
     for arg in p[3]:
         if isinstance(arg, str) and (arg.startswith("'") or arg.startswith('"')):
@@ -428,7 +435,7 @@ def p_writeln(p):
 
 # Regras para write
 def p_write(p):
-    'write : WRITE LPAREN argumentos RPAREN SEMICOLON'
+    'write : WRITE LPAREN argumentos RPAREN'
     codigo = ""
     for arg in p[3]:
         if isinstance(arg, str) and (arg.startswith("'") or arg.startswith('"')):
@@ -497,7 +504,7 @@ def p_write(p):
 
 # Regras para readln
 def p_readln(p):
-    'read : READLN LPAREN argumentos RPAREN SEMICOLON'
+    'read : READLN LPAREN argumentos RPAREN'
     codigo = ""
     for arg in p[3]:
         if isinstance(arg, str) and arg in symbol_table:
@@ -507,8 +514,10 @@ def p_readln(p):
 
             if tipo == 'CHAR':
                 codigo += f"READC\nSTOREG {addr}\n"
-            else:
+            elif tipo == 'STRING':
                 codigo += f"READ\nSTOREG {addr}\n"
+            else:
+                codigo += f"READ\nATOI\nSTOREG {addr}\n"  # ← converte string lida em inteiro
 
         elif isinstance(arg, tuple) and arg[0] == 'array':
             nome_array = arg[1]
@@ -566,10 +575,33 @@ def p_argumento(p):
 def p_expressao_condicional_logica(p):
     '''expressao_condicional : expressao_condicional AND expressao_condicional
                              | expressao_condicional OR expressao_condicional'''
+    left = p[1] if p[1] is not None else ""
+    right = p[3] if p[3] is not None else ""
+
     if p[2] == 'AND':
-        p[0] = concat_safe(p[1], p[3], "AND\n")
+        false_label = new_label()
+        end_label = new_label()
+        p[0] = (
+            concat_safe(left, f"JZ {false_label}\n") +
+            right + f"JZ {false_label}\n" +
+            "PUSHI 1\n" +
+            f"JUMP {end_label}\n" +
+            f"{false_label}:\nPUSHI 0\n" +
+            f"{end_label}:\n"
+        )
+
     elif p[2] == 'OR':
-        p[0] = concat_safe(p[1], p[3], "OR\n")
+        true_label = new_label()
+        end_label = new_label()
+        p[0] = (
+            concat_safe(left, f"JNZ {true_label}\n") +
+            right + f"JNZ {true_label}\n" +
+            "PUSHI 0\n" +
+            f"JUMP {end_label}\n" +
+            f"{true_label}:\nPUSHI 1\n" +
+            f"{end_label}:\n"
+        )
+
 
 
 # Regras para expressões condicionais
@@ -581,8 +613,12 @@ def p_expressao_condicional(p):
                              | expressao_aritmetica EQ expressao_aritmetica
                              | expressao_aritmetica NE expressao_aritmetica'''
     op = p[2]
-    code_left = p[1]
-    code_right = p[3]
+    code_left = p[1] if p[1] is not None else ""
+    code_right = p[3] if p[3] is not None else ""
+
+    print("[DEBUG COMPARACAO]", repr(code_left), repr(code_right), op)
+    print("[DEBUG COND]", [s.type for s in p.slice], p[1:] if len(p) > 1 else "-none-")
+
 
     if op == '>':
         p[0] = concat_safe(code_left, code_right, "SUP\n")
@@ -641,10 +677,14 @@ def p_expressao_condicional(p):
             f"{label_end}:\n"
         )
 
+        # DEBUG: print symbol_table contents
+        print("[DEBUG symbol_table]", symbol_table)
+
 
 # Regras para NOT
 def p_expressao_condicional_not(p):
     '''expressao_condicional : NOT expressao_condicional'''
+    cond = p[2] if p[2] is not None else ""
     p[0] = concat_safe(p[2], "NOT\n")
 
 # Regras para expressões booleanas (com parênteses)
@@ -654,26 +694,32 @@ def p_expressao_condicional_paren(p):
 
 def p_expressao_condicional_bool_expr(p):
     'expressao_condicional : expressao_aritmetica'
-    p[0] = p[1]
+    p[0] = p[1] if p[1] is not None else ""
 
-# Regras para comandos if           
-def p_comando_if(p):
-    '''comando_if : IF expressao_condicional THEN comando %prec IFX
-                  | IF expressao_condicional THEN comando ELSE comando'''
+def p_comando_if_then(p):
+    'comando_if : IF expressao_condicional THEN comando %prec IFX'
+    cond = p[2]
+    then_code = p[4]
+    false_label = new_label()
+    p[0] = concat_safe(cond, f"JZ {false_label}\n", then_code, f"{false_label}:\n")
+
+def p_comando_if_then_else(p):
+    'comando_if : IF expressao_condicional THEN comando ELSE comando'
+    cond = p[2]
+    then_code = p[4]
+    else_code = p[6]
     false_label = new_label()
     end_label = new_label()
-    if len(p) == 5:
-        p[0] = concat_safe(p[2], f"JZ {false_label}\n", p[4], f"{false_label}:\n")
-    else:
-        p[0] = concat_safe(p[2], f"JZ {false_label}\n", p[4], f"JUMP {end_label}\n", f"{false_label}:\n", p[6], f"{end_label}:\n")
-
+    p[0] = concat_safe(cond, f"JZ {false_label}\n", then_code, f"JUMP {end_label}\n", f"{false_label}:\n", else_code, f"{end_label}:\n")
 
 # Regras para o comando while
 def p_comando_while(p):
     'comando_while : WHILE expressao_condicional DO comando'
     start_label = new_label()
     end_label = new_label()
-    p[0] = f"{start_label}:\n{p[2]}JZ {end_label}\n{p[4]}JUMP {start_label}\n{end_label}:\n"
+    cond = p[2] if p[2] is not None else ""
+    p[0] = f"{start_label}:\n{cond}JZ {end_label}\n{p[4]}JUMP {start_label}\n{end_label}:\n"
+
 
 # Regras para o comando for
 def p_comando_for(p):

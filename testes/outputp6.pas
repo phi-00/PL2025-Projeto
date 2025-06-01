@@ -1,0 +1,54 @@
+[DEBUG COMPARACAO] 'PUSHG 1\nPUSHI 0\nADD\nLOADN\n' 'PUSHS "1"\n' =
+[DEBUG COND] ['expressao_condicional', 'expressao_aritmetica', 'EQ', 'expressao_aritmetica'] ['PUSHG 1\nPUSHI 0\nADD\nLOADN\n', '=', 'PUSHS "1"\n']
+Resultado: 
+ PUSHS "Introduza uma string binária:"
+WRITES
+READ
+STOREG 0
+PUSHI 0
+STOREG 2
+PUSHI 1
+STOREG 3
+PUSHG 0
+STRLEN
+STOREG 1
+L4:
+PUSHG 1
+PUSHI 1
+INF
+JZ L3
+JUMP L5
+L3:
+PUSHG 1
+PUSHI 0
+ADD
+LOADN
+PUSHS "1"
+SUB
+JZ L0
+PUSHI 0
+JUMP L1
+L0:
+PUSHI 1
+L1:
+JZ L2
+PUSHG 2
+PUSHG 3
+ADD
+STOREG 2
+L2:
+PUSHG 3
+PUSHI 2
+MUL
+STOREG 3
+PUSHG 1
+PUSHI 1
+SUB
+STOREG 1
+JUMP L4
+L5:
+PUSHS "O valor inteiro correspondente é: "
+WRITES
+PUSHG 2
+WRITEI
+

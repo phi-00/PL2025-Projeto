@@ -1,0 +1,14 @@
+Resultado: 
+ PUSHI -5
+STOREG 0
+PUSHI 10
+STOREG 1
+PUSHG 0
+PUSHG 1
+ADD
+STOREG 2
+PUSHS "A soma dos dois números é: "
+WRITES
+PUSHG 2
+WRITEI
+

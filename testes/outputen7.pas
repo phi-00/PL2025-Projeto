@@ -1,0 +1,8 @@
+Resultado: 
+ PUSHS "João"
+STOREG 0
+PUSHS "Olá, "
+WRITES
+PUSHG 0
+WRITES
+

@@ -1,0 +1,18 @@
+Resultado: 
+ PUSHS "Insere dois números:"
+WRITES
+READ
+ATOI
+STOREG 0
+READ
+ATOI
+STOREG 1
+PUSHG 0
+PUSHG 1
+ADD
+STOREG 2
+PUSHS "A soma é:"
+WRITES
+PUSHG 2
+WRITEI
+
